@@ -23,11 +23,13 @@
  * undefined = "now it's defined";
  * alert( undefined );
  * 浏览器测试结果：
- * 浏览器			测试结果			结论
- * ie				now it's defined	可以改变
- * firefox			undefined			不能改变
- * chrome			now it's defined	可以改变
- * opera			now it's defined	可以改变
+ * ------------+----------------------+-------------
+ *   浏览器	   |    测试结果		  |   结论
+ *   ie    	   |    now it's defined  |   可以改变
+ *   firefox   |    undefined		  |   不能改变
+ *   chrome	   |    now it's defined  |   可以改变
+ *   opera	   |    now it's defined  |   可以改变
+ * ------------+----------------------+-------------
  */
 (function( window, undefined ) {
 var
@@ -66,7 +68,11 @@ var
 	// 构建jQuery对象
 	jQuery = function( selector, context ) {
 		// The jQuery object is actually just the init constructor 'enhanced'
-		// jQuery对象实际上只是增强的初始化构造方法
+		/* 
+		 * jQuery对象实际上只是增强的初始化构造方法,使用原型上的prototype上的init方法构建对象
+		 * jQuery.fn即为jQuery.prototype，通过将jQuery的原型赋给jQuery.fn.init的原型
+		 * 来解决使用init创建实例，创建出的对象继承的是init的prototype上的方法而不会继承jQuery prototype上的方法的问题
+		 */ 
 		return new jQuery.fn.init( selector, context, rootjQuery );
 	},
 
@@ -119,13 +125,17 @@ var
 	},
 
 	// The ready event handler and self cleanup method
+	// ready事件的处理器，自我清理函数
 	DOMContentLoaded = function() {
+		// 判断浏览器绑定事件回调的函数，决定调用相应的解绑函数
+		// attachEvent/addEventListener 
 		if ( document.addEventListener ) {
 			document.removeEventListener( "DOMContentLoaded", DOMContentLoaded, false );
 			jQuery.ready();
 		} else if ( document.readyState === "complete" ) {
 			// we're here because readyState === "complete" in oldIE
 			// which is good enough for us to call the dom ready!
+			// 在旧版本IE中使用readyState === "complete"可以正确判断dom ready事件
 			document.detachEvent( "onreadystatechange", DOMContentLoaded );
 			jQuery.ready();
 		}
@@ -134,6 +144,11 @@ var
 	// [[Class]] -> type pairs
 	class2type = {};
 
+/* 
+ * 将jQuery的prototype赋给jQuery.fn，缓存jQuery.prototype属性，避免频繁访问带来的额外开销
+ * jQuery的构造函数是原型上的init方法，而不是function jQuery 
+ * 每次调用$()会用jQuery原型上的init创建一个实例 
+ */ 
 jQuery.fn = jQuery.prototype = {
 	constructor: jQuery,
 	init: function( selector, context, rootjQuery ) {
@@ -262,6 +277,7 @@ jQuery.fn = jQuery.prototype = {
 		}
 
 		if ( selector.selector !== undefined ) {
+			// 将选择器和上下文对象保存到jQuery对象中
 			this.selector = selector.selector;
 			this.context = selector.context;
 		}
@@ -278,7 +294,7 @@ jQuery.fn = jQuery.prototype = {
 	jquery: "1.8.1",
 
 	// The default length of a jQuery object is 0
-	// jQuery对象的默认length设置为0
+	// jQuery对象的默认length设置为0，设置该属性为了模拟数组
 	length: 0,
 
 	// The number of elements contained in the matched element set
@@ -294,26 +310,33 @@ jQuery.fn = jQuery.prototype = {
 
 	// Get the Nth element in the matched element set OR
 	// Get the whole matched element set as a clean array
+	// 获取第n个匹配元素或者获取包含匹配元素的纯数组
 	get: function( num ) {
 		return num == null ?
 
 			// Return a 'clean' array
+			// 如果不传入序号，则返回包含匹配元素的纯数组
 			this.toArray() :
 
 			// Return just the object
+			// 返回匹配元素的dom对象，如果传入负数，则按照倒序取
 			( num < 0 ? this[ this.length + num ] : this[ num ] );
 	},
 
 	// Take an array of elements and push it onto the stack
 	// (returning the new matched element set)
+	// 将一个DOM元素集合加入到jQuery栈
 	pushStack: function( elems, name, selector ) {
 
 		// Build a new jQuery matched element set
+		// 调用jQuery的构造方法构造一个新对象，并将dom元素集合merge到新的对象中
 		var ret = jQuery.merge( this.constructor(), elems );
 
 		// Add the old object onto the stack (as a reference)
+		// 持有就jQuery对象的引用
 		ret.prevObject = this;
 
+		// 传递上下文对象
 		ret.context = this.context;
 
 		if ( name === "find" ) {
@@ -323,62 +346,86 @@ jQuery.fn = jQuery.prototype = {
 		}
 
 		// Return the newly-formed element set
+		// 返回新的包装过的元素集合
 		return ret;
 	},
 
 	// Execute a callback for every element in the matched set.
+	// 对集合中的所有元素调用回调函数
 	// (You can seed the arguments with an array of args, but this is
 	// only used internally.)
+	// 你可以使用一个数组来传递参数，但是这种功能只是为内部使用而提供
 	each: function( callback, args ) {
 		return jQuery.each( this, callback, args );
 	},
 
 	ready: function( fn ) {
 		// Add the callback
-		// 增加回调
+		// 增加回调，使用jQuery.ready.promise()返回的只读Deferred对象
 		jQuery.ready.promise().done( fn );
 
 		return this;
 	},
 
+	// 获取匹配集合中指定的元素
+	// 使用pushStack构造新的jQuery对象
 	eq: function( i ) {
 		i = +i;
 		return i === -1 ?
+			/*
+			 * 当slice函数的第一个参数为负数时，是倒数计数，截取逻辑是向数组的末尾方向进行截取
+			 * 比如数组[a,b,c,d,e,f,g],slice(-4)即为从倒数第二个元素截取到数组末尾，为[d,e,f,g]
+			 * slice(-4,-2)为从倒数第四个元素截取到倒数第二个元素，为[d,e]
+			 * 并且slice第一个参数为负时，第二个参数不能为0，所以i===-1需要特殊处理
+			 */
 			this.slice( i ) :
 			this.slice( i, i + 1 );
 	},
 
+	// 第一个元素
 	first: function() {
 		return this.eq( 0 );
 	},
 
+	// 最后一个元素
 	last: function() {
 		return this.eq( -1 );
 	},
 
+	// 通过Array.prototype.slice实现数组的截取
+	// 通过pushStack实现截取对象的包装
 	slice: function() {
 		return this.pushStack( core_slice.apply( this, arguments ),
 			"slice", core_slice.call(arguments).join(",") );
 	},
 
+	// 遍历一个可遍历的类似数组的对象，对元素调用callback，将结果存到另一个数组中
 	map: function( callback ) {
 		return this.pushStack( jQuery.map(this, function( elem, i ) {
 			return callback.call( elem, i, elem );
 		}));
 	},
 
+	// 获取pushStack构造的对象中持有的原数据对象的引用
 	end: function() {
 		return this.prevObject || this.constructor(null);
 	},
 
 	// For internal use only.
+	// 内部使用
 	// Behaves like an Array's method, not like a jQuery method.
+	// 模拟数组对象的行为
 	push: core_push,
+	// 调用数组的排序方法进行排序
 	sort: [].sort,
 	splice: [].splice
 };
 
 // Give the init function the jQuery prototype for later instantiation
+/*
+ * 将jQuery的原型赋给jQuery.fn.init的原型，使init方法创建的对象包含jQuery原型中的方法
+ * 解决如果使用init创建实例，这个对象继承的是init的prototype上的方法而不会继承jQuery prototype上的方法的问题 
+ */
 jQuery.fn.init.prototype = jQuery.fn;
 
 jQuery.extend = jQuery.fn.extend = function() {
@@ -957,39 +1004,54 @@ jQuery.extend({
 	}
 });
 
+/*
+ * 在DOM加载完成调用事件的机制，通过Deferred对象实现
+ */
 jQuery.ready.promise = function( obj ) {
 	if ( !readyList ) {
 
 		readyList = jQuery.Deferred();
 
 		// Catch cases where $(document).ready() is called after the browser event has already occurred.
+		// 处理$(document).ready()在浏览器事件已经出现后才调用的情况
 		// we once tried to use readyState "interactive" here, but it caused issues like the one
+		// 我们试过使用readyState "interactive"，但是发现一个问题，见url：
 		// discovered by ChrisS here: http://bugs.jquery.com/ticket/12282#comment:15
 		if ( document.readyState === "complete" ) {
 			// Handle it asynchronously to allow scripts the opportunity to delay ready
+			// 异步处理，给脚本提供延迟ready的机会
 			setTimeout( jQuery.ready, 1 );
 
 		// Standards-based browsers support DOMContentLoaded
+		// 符合标准的浏览器支持DOMContentLoaded
 		} else if ( document.addEventListener ) {
 			// Use the handy event callback
+			// 使用事件回调分发
 			document.addEventListener( "DOMContentLoaded", DOMContentLoaded, false );
 
 			// A fallback to window.onload, that will always work
+			// 在window对象添加onload，肯定会起作用
 			window.addEventListener( "load", jQuery.ready, false );
 
 		// If IE event model is used
+		// 如果使用IE事件模型
 		} else {
 			// Ensure firing before onload, maybe late but safe also for iframes
+			// 确保在onload事件之前调用，或许会有延迟，但是对iframes也是安全的
 			document.attachEvent( "onreadystatechange", DOMContentLoaded );
 
 			// A fallback to window.onload, that will always work
+			// 在window对象添加onload，肯定会起作用
 			window.attachEvent( "onload", jQuery.ready );
 
 			// If IE and not a frame
+			// 如果是IE并且不是一个frame
 			// continually check to see if the document is ready
+			// 继续检查文档是否已经准备完成
 			var top = false;
 
 			try {
+				// 顶层的frame是否已经初始化完成，dom树是否构造完成
 				top = window.frameElement == null && document.documentElement;
 			} catch(e) {}
 
@@ -1006,6 +1068,7 @@ jQuery.ready.promise = function( obj ) {
 						}
 
 						// and execute any waiting functions
+						// 执行任何等待的函数
 						jQuery.ready();
 					}
 				})();
@@ -1022,6 +1085,7 @@ jQuery.each("Boolean Number String Function Array Date RegExp Object".split(" ")
 });
 
 // All jQuery objects should point back to these
+// 所有jQuery对象必须指向这个
 rootjQuery = jQuery(document);
 // String to Object options format cache
 var optionsCache = {};
@@ -1220,6 +1284,7 @@ jQuery.extend({
 
 	/*
 	 * 异步队列
+	 * 方法通过jQuery.Callbacks进行包装和维护
 	 */
 	Deferred: function( func ) {
 		var tuples = [
@@ -1242,6 +1307,7 @@ jQuery.extend({
 				},
 				// 便捷方法，同时传入成功、失败、通知的回调函数
 				then: function( /* fnDone, fnFail, fnProgress */ ) {
+					// 从arguments中获取状态对应的处理函数
 					var fns = arguments;
 					return jQuery.Deferred(function( newDefer ) {
 						// each() 方法用来让DOM循环结构更简单更不易出错。它会迭代jQuery对象中的每一个DOM元素。
@@ -1249,13 +1315,16 @@ jQuery.extend({
 						// 回调函数是在当前DOM元素为上下文的语境中触发的。因此关键字 this 总是指向这个元素。
 						// .each( function(index, Element) )
 						jQuery.each( tuples, function( i, tuple ) {
-							// i为遍历的索引号，tuple为遍历到的元素，tuple[ 0 ]为"resolve"，"reject"，"notify"。
+							// i为遍历的索引号，tuple为遍历到的元素，tuple[ 0 ]为"resolve"、"reject"、"notify"。
 							var action = tuple[ 0 ],
+								// fn为对应的处理函数
 								fn = fns[ i ];
 							// deferred[ done | fail | progress ] for forwarding actions to newDefer
-							// 为newDefer的done、fail、progress绑定函数
+							// 通过jQuery.Callbacks里的函数进行包装
 							deferred[ tuple[1] ]( jQuery.isFunction( fn ) ?
 								function() {
+									// returned为传入的函数的返回值，如果then中传入的函数的返回值也是deferred
+									// 则继续通过promise()获取只读对象进行调用
 									var returned = fn.apply( this, arguments );
 									if ( returned && jQuery.isFunction( returned.promise ) ) {
 										returned.promise()
@@ -1274,6 +1343,8 @@ jQuery.extend({
 				},
 				// Get a promise for this deferred
 				// If obj is provided, the promise aspect is added to the object
+				// 获取deferred对象的只读版本
+				// 如果obj已经提供，promise被加到object中
 				promise: function( obj ) {
 					return typeof obj === "object" ? jQuery.extend( obj, promise ) : promise;
 				}
@@ -1281,10 +1352,13 @@ jQuery.extend({
 			deferred = {};
 
 		// Keep pipe for back-compat
+		// 为pipe提供向后兼容性
 		promise.pipe = promise.then;
 
 		// Add list-specific methods
+		// 添加指定的方法
 		jQuery.each( tuples, function( i, tuple ) {
+			// tuple[ 2 ]是jQuery.Callbacks里的队列
 			var list = tuple[ 2 ],
 				stateString = tuple[ 3 ];
 
@@ -1292,12 +1366,25 @@ jQuery.extend({
 			promise[ tuple[1] ] = list.add;
 
 			// Handle state
+			// 处理状态
 			if ( stateString ) {
 				list.add(function() {
 					// state = [ resolved | rejected ]
 					state = stateString;
 
-				// [ reject_list | resolve_list ].disable; progress_list.lock
+				/* 
+				 * [ reject_list | resolve_list ].disable; progress_list.lock
+				 * 位运算 XOR 由符号（^）表示，直接对二进制形式进行运算
+				 * XOR 不同于 OR，当只有一个数位存放的是 1 时，它才返回 1。真值表如下：
+				 *    --------------------+--------------------+-------
+				 *     第一个数字中的数位 | 第二个数字中的数位 | 结果
+				 *   			1	      |          1	       |   0
+				 *   			1		  | 		 0	       |   1
+				 *   			0		  |     	 1	       |   1
+				 *  			0		  |     	 0	       |   0
+				 *    --------------------+--------------------+-------
+				 */
+
 				}, tuples[ i ^ 1 ][ 2 ].disable, tuples[ 2 ][ 2 ].lock );
 			}
 
@@ -1307,9 +1394,11 @@ jQuery.extend({
 		});
 
 		// Make the deferred a promise
+		// 提供只读对象
 		promise.promise( deferred );
 
 		// Call given func if any
+		// 调用提供的方法
 		if ( func ) {
 			func.call( deferred, deferred );
 		}
