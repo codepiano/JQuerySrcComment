@@ -9,4 +9,6 @@ JQuery Sourcecode Comment
 
 2. http://nuysoft.iteye.com/blog/1190542 
 
+3. http://www.learningjquery.com/
+
 转载请注明出处，谢谢
