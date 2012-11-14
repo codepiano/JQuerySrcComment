@@ -18,7 +18,7 @@
  * 更重要的是，将window作为参数传入，可以在压缩代码时进行优化
  * (function(a,b){})(window);window 被优化为 a,压缩后文件更小
  * 2.传入undefined
- * 是为了在"自调用匿名函数"的作用域内，确保undefined是真的未定义
+ * 是为了在"自调用匿名函数"的作用域内，确信undefined是真的未定义
  * 因为undefined能够被重写，赋予新的值 
  * undefined = "now it's defined";
  * alert( undefined );
@@ -48,11 +48,13 @@ var
 	navigator = window.navigator,
 
 	// Map over jQuery in case of overwrite
-	// 防止被覆盖
+	// 初始化前先将window.jQuery的值保留到_jQuery中，防止被jQuery覆盖
+	// 调用jQuery.noConflict()后再将值复制回window.jQuery中，将符号的控制权交回
 	_jQuery = window.jQuery,
 
 	// Map over the $ in case of overwrite
-	// 防止被覆盖
+	// 初始化前先将window.$的值保留到_$中，防止被jQuery覆盖
+	// 调用jQuery.noConflict()后再将值复制回window.$中，将符号的控制权交回
 	_$ = window.$,
 
 	// Save a reference to some core methods
@@ -109,17 +111,19 @@ var
 	rsingleTag = /^<(\w+)\s*\/?>(?:<\/\1>|)$/,
 
 	// JSON RegExp
-	// 匹配json格式数据
+	// 用于json格式数据校验
 	rvalidchars = /^[\],:{}\s]*$/,
 	rvalidbraces = /(?:^|:|,)(?:\s*\[)+/g,
 	rvalidescape = /\\(?:["\\\/bfnrt]|u[\da-fA-F]{4})/g,
 	rvalidtokens = /"[^"\\\r\n]*"|true|false|null|-?(?:\d\d*\.|)\d+(?:[eE][\-+]?\d+|)/g,
 
 	// Matches dashed string for camelizing
+	// 驼峰规则的检查和修改使用的正则
 	rmsPrefix = /^-ms-/,
 	rdashAlpha = /-([\da-z])/gi,
 
 	// Used by jQuery.camelCase as callback to replace()
+	// jQuery.camelCase使用的用于替换的回调
 	fcamelCase = function( all, letter ) {
 		return ( letter + "" ).toUpperCase();
 	},
@@ -326,6 +330,13 @@ jQuery.fn = jQuery.prototype = {
 	// Take an array of elements and push it onto the stack
 	// (returning the new matched element set)
 	// 将一个DOM元素集合加入到jQuery栈
+	/*
+	 * 该函数配合.end(),可以用来遍历dom树
+	 * 当你使用fine()、parent()、filter()等jQuery提供的方法时
+	 * jQuery返回的是pushStack处理过的对象，对象持有原有对象的引用
+	 * 可以使用end()方法获取原有对象的引用
+	 * 参见:http://www.learningjquery.com/2011/12/using-jquerys-pushstack-for-reusable-dom-traversing-methods
+	 */
 	pushStack: function( elems, name, selector ) {
 
 		// Build a new jQuery matched element set
@@ -428,27 +439,38 @@ jQuery.fn = jQuery.prototype = {
  */
 jQuery.fn.init.prototype = jQuery.fn;
 
+/*
+ * 模拟面向对象的继承
+ */
 jQuery.extend = jQuery.fn.extend = function() {
 	var options, name, src, copy, copyIsArray, clone,
+		// 如果是否深拷贝参数为false,则直接将{}赋值给target
 		target = arguments[0] || {},
 		i = 1,
 		length = arguments.length,
 		deep = false;
 
 	// Handle a deep copy situation
+	// 处理是否深拷贝，第一个参数如果是boolean类型
+	// 如果为true，则会进入下面的流程进行处理
+	// 如果为false，则在上面的target赋值语句被拦截
+	// 则说明该参数是指明是否深拷贝的属性，对象链从第二个参数开始
 	if ( typeof target === "boolean" ) {
 		deep = target;
 		target = arguments[1] || {};
 		// skip the boolean and the target
+		// 跳过参数和目标对象
 		i = 2;
 	}
 
 	// Handle case when target is a string or something (possible in deep copy)
+	// 处理target是字符串或其他的情况（可能再深拷贝中出现）
 	if ( typeof target !== "object" && !jQuery.isFunction(target) ) {
 		target = {};
 	}
 
 	// extend jQuery itself if only one argument is passed
+	// 如果只传入了一个参数，将jQuery对象本身传给target
 	if ( length === i ) {
 		target = this;
 		--i;
@@ -456,18 +478,22 @@ jQuery.extend = jQuery.fn.extend = function() {
 
 	for ( ; i < length; i++ ) {
 		// Only deal with non-null/undefined values
+		// 忽略值为null和undefined的属性
 		if ( (options = arguments[ i ]) != null ) {
 			// Extend the base object
+			// 拷贝属性
 			for ( name in options ) {
 				src = target[ name ];
 				copy = options[ name ];
 
 				// Prevent never-ending loop
+				// 防止死循环
 				if ( target === copy ) {
 					continue;
 				}
 
 				// Recurse if we're merging plain objects or arrays
+				// 如果在复制对象或者数组，递归处理
 				if ( deep && copy && ( jQuery.isPlainObject(copy) || (copyIsArray = jQuery.isArray(copy)) ) ) {
 					if ( copyIsArray ) {
 						copyIsArray = false;
@@ -478,9 +504,11 @@ jQuery.extend = jQuery.fn.extend = function() {
 					}
 
 					// Never move original objects, clone them
+					// 复制属性
 					target[ name ] = jQuery.extend( deep, clone, copy );
 
 				// Don't bring in undefined values
+				// 不引入值为undefined的属性
 				} else if ( copy !== undefined ) {
 					target[ name ] = copy;
 				}
@@ -489,15 +517,20 @@ jQuery.extend = jQuery.fn.extend = function() {
 	}
 
 	// Return the modified object
+	// 返回修改后的对象
 	return target;
 };
 
 jQuery.extend({
+	// 解决不同库之间符号冲突的问题
 	noConflict: function( deep ) {
+		// 如果window.$被jQuery占用，交出符号控制
+		// 占用前的值再初始化jQuery前保留在_$中
 		if ( window.$ === jQuery ) {
 			window.$ = _$;
 		}
 
+		// 是否也交出jQuery符号的控制权
 		if ( deep && window.jQuery === jQuery ) {
 			window.jQuery = _jQuery;
 		}
@@ -506,13 +539,16 @@ jQuery.extend({
 	},
 
 	// Is the DOM ready to be used? Set to true once it occurs.
+	// 判断DOM是否已经可以使用，出现后将值设置为true
 	isReady: false,
 
 	// A counter to track how many items to wait for before
 	// the ready event fires. See #6781
+	// 一个计数变量，跟踪多少项目在等待DOM完成准备事件触发
 	readyWait: 1,
 
 	// Hold (or release) the ready event
+	// 保持或释放DOM完成事件
 	holdReady: function( hold ) {
 		if ( hold ) {
 			jQuery.readyWait++;
@@ -522,30 +558,37 @@ jQuery.extend({
 	},
 
 	// Handle when the DOM is ready
+	// 处理DOM完成事件
 	ready: function( wait ) {
 
 		// Abort if there are pending holds or we're already ready
+		// 如果还有即将发生的hold事件或者已经准备好
 		if ( wait === true ? --jQuery.readyWait : jQuery.isReady ) {
 			return;
 		}
 
 		// Make sure body exists, at least, in case IE gets a little overzealous (ticket #5443).
+		// 确信body存在，至少，防止IE太热心(ticket #5443)
 		if ( !document.body ) {
 			return setTimeout( jQuery.ready, 1 );
 		}
 
 		// Remember that the DOM is ready
+		// 设置DOM已经完成的状态
 		jQuery.isReady = true;
 
 		// If a normal DOM Ready event fired, decrement, and wait if need be
+		// 如果一个普通的DOM完成事件被触发，如果必要，进行等待
 		if ( wait !== true && --jQuery.readyWait > 0 ) {
 			return;
 		}
 
 		// If there are functions bound, to execute
+		// 如果绑定的有函数，执行
 		readyList.resolveWith( document, [ jQuery ] );
 
 		// Trigger any bound ready events
+		// 触发任何绑定的DOM ready事件
 		if ( jQuery.fn.trigger ) {
 			jQuery( document ).trigger("ready").off("ready");
 		}
@@ -560,14 +603,17 @@ jQuery.extend({
 		return jQuery.type(obj) === "function";
 	},
 
+	// 判断是否是数组
 	isArray: Array.isArray || function( obj ) {
 		return jQuery.type(obj) === "array";
 	},
 
+	// 判断是否是window
 	isWindow: function( obj ) {
 		return obj != null && obj == obj.window;
 	},
 
+	// 判断是否是数字,isFinite判断数字是否是无穷大
 	isNumeric: function( obj ) {
 		return !isNaN( parseFloat(obj) ) && isFinite( obj );
 	},
@@ -579,16 +625,21 @@ jQuery.extend({
 			class2type[ core_toString.call(obj) ] || "object";
 	},
 
+	// 是否是对象
 	isPlainObject: function( obj ) {
 		// Must be an Object.
+		// 必须是对象
 		// Because of IE, we also have to check the presence of the constructor property.
+		// 由于IE的原因，必须检查构造器属性
 		// Make sure that DOM nodes and window objects don't pass through, as well
+		// 确信DOM节点和window对象不被传进来
 		if ( !obj || jQuery.type(obj) !== "object" || obj.nodeType || jQuery.isWindow( obj ) ) {
 			return false;
 		}
 
 		try {
 			// Not own constructor property must be Object
+			// 含构造器的可能是对象
 			if ( obj.constructor &&
 				!core_hasOwn.call(obj, "constructor") &&
 				!core_hasOwn.call(obj.constructor.prototype, "isPrototypeOf") ) {
@@ -600,7 +651,9 @@ jQuery.extend({
 		}
 
 		// Own properties are enumerated firstly, so to speed up,
+		// 首先枚举对象属性，为了加速，只判断最后一个属性
 		// if last one is own, then all properties are own.
+		// 如果含有最后一个属性，一定含有所有属性
 
 		var key;
 		for ( key in obj ) {}
@@ -608,6 +661,7 @@ jQuery.extend({
 		return key === undefined || core_hasOwn.call( obj, key );
 	},
 
+	// 是否是空对象，如果没有属性，则为空对象
 	isEmptyObject: function( obj ) {
 		var name;
 		for ( name in obj ) {
@@ -616,6 +670,7 @@ jQuery.extend({
 		return true;
 	},
 
+	// 错误
 	error: function( msg ) {
 		throw new Error( msg );
 	},
@@ -651,21 +706,26 @@ jQuery.extend({
 			(parsed.cacheable ? jQuery.clone( parsed.fragment ) : parsed.fragment).childNodes );
 	},
 
+	// 转换JSON字符串
 	parseJSON: function( data ) {
 		if ( !data || typeof data !== "string") {
 			return null;
 		}
 
 		// Make sure leading/trailing whitespace is removed (IE can't handle it)
+		// 确信开头和末尾的空白字符已经被去掉（IE无法处理该问题）
 		data = jQuery.trim( data );
 
 		// Attempt to parse using the native JSON parser first
+		// 尝试使用内置JSON解析器进行处理
 		if ( window.JSON && window.JSON.parse ) {
 			return window.JSON.parse( data );
 		}
 
 		// Make sure the incoming data is actual JSON
+		// 确信输入的数据是JSON数据
 		// Logic borrowed from http://json.org/json2.js
+		// 从http://json.org/json2.js中借用逻辑
 		if ( rvalidchars.test( data.replace( rvalidescape, "@" )
 			.replace( rvalidtokens, "]" )
 			.replace( rvalidbraces, "")) ) {
@@ -677,15 +737,19 @@ jQuery.extend({
 	},
 
 	// Cross-browser xml parsing
+	// 跨浏览器的xml解析
 	parseXML: function( data ) {
 		var xml, tmp;
+		// 如果传入的不是字符串，返回null
 		if ( !data || typeof data !== "string" ) {
 			return null;
 		}
 		try {
+			// 普通解析方式，文艺解析方式
 			if ( window.DOMParser ) { // Standard
 				tmp = new DOMParser();
 				xml = tmp.parseFromString( data , "text/xml" );
+			// IE解析方式
 			} else { // IE
 				xml = new ActiveXObject( "Microsoft.XMLDOM" );
 				xml.async = "false";
@@ -703,13 +767,16 @@ jQuery.extend({
 	noop: function() {},
 
 	// Evaluates a script in a global context
+	// 在全局上下文执行脚本
 	// Workarounds based on findings by Jim Driscoll
 	// http://weblogs.java.net/blog/driscoll/archive/2009/09/08/eval-javascript-global-context
 	globalEval: function( data ) {
 		if ( data && core_rnotwhite.test( data ) ) {
 			// We use execScript on Internet Explorer
+			// 在IE中使用execScript
 			// We use an anonymous function so that context is window
 			// rather than jQuery in Firefox
+			// 在firefox中使用匿名函数
 			( window.execScript || function( data ) {
 				window[ "eval" ].call( window, data );
 			} )( data );
@@ -717,7 +784,9 @@ jQuery.extend({
 	},
 
 	// Convert dashed to camelCase; used by the css and data modules
+	// 转换为驼峰规则，在css和数据模块中使用
 	// Microsoft forgot to hump their vendor prefix (#9572)
+	// 微软忘了把他们的前缀ms-转换为驼峰规则
 	camelCase: function( string ) {
 		return string.replace( rmsPrefix, "ms-" ).replace( rdashAlpha, fcamelCase );
 	},
@@ -728,6 +797,7 @@ jQuery.extend({
 	},
 
 	// args is for internal usage only
+	// args参数只在脚本内部实用
 	each: function( obj, callback, args ) {
 		var name,
 			i = 0,
@@ -736,12 +806,14 @@ jQuery.extend({
 
 		if ( args ) {
 			if ( isObj ) {
+				// 如果是对象，遍历属性
 				for ( name in obj ) {
 					if ( callback.apply( obj[ name ], args ) === false ) {
 						break;
 					}
 				}
 			} else {
+				// 使用类似遍历数组的方式进行遍历
 				for ( ; i < length; ) {
 					if ( callback.apply( obj[ i++ ], args ) === false ) {
 						break;
@@ -750,9 +822,11 @@ jQuery.extend({
 			}
 
 		// A special, fast, case for the most common use of each
+		// 一个特殊、快速、可以应付大部分普通情况的each
 		} else {
 			if ( isObj ) {
 				for ( name in obj ) {
+					// 如果函数返回false,跳出循环
 					if ( callback.call( obj[ name ], name, obj[ name ] ) === false ) {
 						break;
 					}
@@ -766,18 +840,22 @@ jQuery.extend({
 			}
 		}
 
+		// 返回调用对象
 		return obj;
 	},
 
 	// Use native String.trim function wherever possible
+	// 尽可能得使用本地的String.trim
 	trim: core_trim && !core_trim.call("\uFEFF\xA0") ?
 		function( text ) {
+			// 如果trim的字符串为null,返回空字符串
 			return text == null ?
 				"" :
 				core_trim.call( text );
 		} :
 
 		// Otherwise use our own trimming functionality
+		// 如果没有，则使用jQuery的trim函数
 		function( text ) {
 			return text == null ?
 				"" :
@@ -785,18 +863,22 @@ jQuery.extend({
 		},
 
 	// results is for internal usage only
+	// results参数只提供给内部使用
 	makeArray: function( arr, results ) {
 		var type,
 			ret = results || [];
 
 		if ( arr != null ) {
 			// The window, strings (and functions) also have 'length'
+			// 窗口对象，字符串和函数也有length属性
 			// Tweaked logic slightly to handle Blackberry 4.7 RegExp issues #6930
 			type = jQuery.type( arr );
 
+			// 如果只是个对象且无法遍历，简单使用数组进行包装
 			if ( arr.length == null || type === "string" || type === "function" || type === "regexp" || jQuery.isWindow( arr ) ) {
 				core_push.call( ret, arr );
 			} else {
+				// 调用jQuery.merge方法
 				jQuery.merge( ret, arr );
 			}
 		}
@@ -804,19 +886,24 @@ jQuery.extend({
 		return ret;
 	},
 
+	// 判断是否在数组中
 	inArray: function( elem, arr, i ) {
 		var len;
 
 		if ( arr ) {
+			// 优先调用indexOf方法
 			if ( core_indexOf ) {
 				return core_indexOf.call( arr, elem, i );
 			}
 
 			len = arr.length;
+			// 处理i的值，如果转换为布尔类型为false,返回0
+			// 如果是非0数字，再根据正负进行处理
 			i = i ? i < 0 ? Math.max( 0, len + i ) : i : 0;
 
 			for ( ; i < len; i++ ) {
 				// Skip accessing in sparse arrays
+				// 跳过稀疏数组
 				if ( i in arr && arr[ i ] === elem ) {
 					return i;
 				}
@@ -857,7 +944,7 @@ jQuery.extend({
 	 * callback 在每个数组元素上调用的函数
 	 * inv 指示进行选取还是过滤
 	 * inv为false，保留调用callback返回true的元素
-	 * inv为true保留调用callback为false的元素
+	 * inv为true，保留调用callback为false的元素
 	 */
 	grep: function( elems, callback, inv ) {
 		var retVal,
@@ -881,29 +968,35 @@ jQuery.extend({
 	},
 
 	// arg is for internal usage only
+	// arg参数仅供内部使用
 	map: function( elems, callback, arg ) {
 		var value, key,
 			ret = [],
 			i = 0,
 			length = elems.length,
 			// jquery objects are treated as arrays
+			// jQuery对象被当做数组来使用
 			isArray = elems instanceof jQuery || length !== undefined && typeof length === "number" && ( ( length > 0 && elems[ 0 ] && elems[ length -1 ] ) || length === 0 || jQuery.isArray( elems ) ) ;
 
 		// Go through the array, translating each of the items to their
+		// 遍历数组
 		if ( isArray ) {
 			for ( ; i < length; i++ ) {
 				value = callback( elems[ i ], i, arg );
 
+				// 忽略调用callback返回值为null的属性
 				if ( value != null ) {
 					ret[ ret.length ] = value;
 				}
 			}
 
 		// Go through every key on the object,
+		// 遍历对象的每一个属性
 		} else {
 			for ( key in elems ) {
 				value = callback( elems[ key ], key, arg );
 
+				// 忽略调用callback返回值为null的属性
 				if ( value != null ) {
 					ret[ ret.length ] = value;
 				}
@@ -911,14 +1004,17 @@ jQuery.extend({
 		}
 
 		// Flatten any nested arrays
+		// 返回纯净的数组对象
 		return ret.concat.apply( [], ret );
 	},
 
 	// A global GUID counter for objects
+	// 全局的对象GUID计数器
 	guid: 1,
 
 	// Bind a function to a context, optionally partially applying any
 	// arguments.
+	// 为一个函数绑定上下文对象，主要是为了保证函数中的this关键字有意义
 	proxy: function( fn, context ) {
 		var tmp, args, proxy;
 
@@ -930,24 +1026,30 @@ jQuery.extend({
 
 		// Quick check to determine if target is callable, in the spec
 		// this throws a TypeError, but we will just return undefined.
+		// 快速确定目标函数是否是可调用的，检查会抛出一个类型错误的异常
+		// 该函数只会返回一个undefined
 		if ( !jQuery.isFunction( fn ) ) {
 			return undefined;
 		}
 
 		// Simulated bind
+		// 绑定上下文，准备参数
 		args = core_slice.call( arguments, 2 );
 		proxy = function() {
 			return fn.apply( context, args.concat( core_slice.call( arguments ) ) );
 		};
 
 		// Set the guid of unique handler to the same of original handler, so it can be removed
+		// 将特别handler的GUID和原始handler的GUID设置为同一个，使其可以被移除
 		proxy.guid = fn.guid = fn.guid || proxy.guid || jQuery.guid++;
 
 		return proxy;
 	},
 
 	// Multifunctional method to get and set values of a collection
+	// 获取或者设置集合的值的多功能方法
 	// The value/s can optionally be executed if it's a function
+	// 如果值是一个函数，则其可以被任意执行
 	access: function( elems, fn, key, value, chainable, emptyGet, pass ) {
 		var exec,
 			bulk = key == null,
@@ -955,6 +1057,7 @@ jQuery.extend({
 			length = elems.length;
 
 		// Sets many values
+		// 设置多个值,如果key为对象，遍历对象key内的属性值，然后调用access方法
 		if ( key && typeof key === "object" ) {
 			for ( i in key ) {
 				jQuery.access( elems, fn, i, key[i], 1, emptyGet, value );
@@ -962,12 +1065,15 @@ jQuery.extend({
 			chainable = 1;
 
 		// Sets one value
+		// 设置单个值
 		} else if ( value !== undefined ) {
 			// Optionally, function values get executed if exec is true
+			// 如果exec为true，为函数的值会被执行
 			exec = pass === undefined && jQuery.isFunction( value );
 
 			if ( bulk ) {
 				// Bulk operations only iterate when executing function values
+				// Bulk只在执行值为函数的情况下使用
 				if ( exec ) {
 					exec = fn;
 					fn = function( elem, key, value ) {
@@ -975,12 +1081,14 @@ jQuery.extend({
 					};
 
 				// Otherwise they run against the entire set
+				// 调用fn,传入整个集合
 				} else {
 					fn.call( elems, value );
 					fn = null;
 				}
 			}
 
+			// 如果fn不为空，执行函数
 			if ( fn ) {
 				for (; i < length; i++ ) {
 					fn( elems[i], key, exec ? value.call( elems[i], i, fn( elems[i], key ) ) : value, pass );
@@ -999,6 +1107,7 @@ jQuery.extend({
 				length ? fn( elems[0], key ) : emptyGet;
 	},
 
+	// 返回当前日期
 	now: function() {
 		return ( new Date() ).getTime();
 	}
@@ -1037,7 +1146,7 @@ jQuery.ready.promise = function( obj ) {
 		// 如果使用IE事件模型
 		} else {
 			// Ensure firing before onload, maybe late but safe also for iframes
-			// 确保在onload事件之前调用，或许会有延迟，但是对iframes也是安全的
+			// 确信在onload事件之前调用，或许会有延迟，但是对iframes也是安全的
 			document.attachEvent( "onreadystatechange", DOMContentLoaded );
 
 			// A fallback to window.onload, that will always work
@@ -1085,14 +1194,18 @@ jQuery.each("Boolean Number String Function Array Date RegExp Object".split(" ")
 });
 
 // All jQuery objects should point back to these
-// 所有jQuery对象必须指向这个
+// 所有jQuery对象必须指向rootjQuery
 rootjQuery = jQuery(document);
 // String to Object options format cache
+// 缓存对象格式的选项
 var optionsCache = {};
 
 // Convert String-formatted options into Object-formatted ones and store in cache
+// 把字符串格式的选项转换到对象格式，然后存储在cache中
 function createOptions( options ) {
+	// 初始化
 	var object = optionsCache[ options ] = {};
+	// 使用空白字符分割，然后通过each方法在空白对象上设置属性
 	jQuery.each( options.split( core_rspace ), function( _, flag ) {
 		object[ flag ] = true;
 	});
@@ -1101,51 +1214,70 @@ function createOptions( options ) {
 
 /*
  * Create a callback list using the following parameters:
+ * 利用下列参数构造一个回调列表
  *
  *	options: an optional list of space-separated options that will change how
  *			the callback list behaves or a more traditional option object
+ *	        一个可选的使用空白字符分割的选项列表，会改变回调函数列表的行为
+ *	        也可以使用传统的选项对象
  *
  * By default a callback list will act like an event callback list and can be
  * "fired" multiple times.
+ * 默认情况下，一个回调函数列表会表现的像一个事件回调列表，可以被触发多次
  *
  * Possible options:
+ * 可能的选项
  *
  *	once:			will ensure the callback list can only be fired once (like a Deferred)
+ *					回调列表只会被执行一次(像一个Deferred)
  *
  *	memory:			will keep track of previous values and will call any callback added
  *					after the list has been fired right away with the latest "memorized"
  *					values (like a Deferred)
+ *					追踪前面产生的值，而且会正确调用任何在list被触发后加入到list中的回调
  *
  *	unique:			will ensure a callback can only be added once (no duplicate in the list)
+ *					保证一个回调函数只会被加入一次(列表中的回调不会被同名回调覆盖)
  *
  *	stopOnFalse:	interrupt callings when a callback returns false
+ *					如果回调函数中的一个返回false,则终止回调函数的执行
  *
  */
 jQuery.Callbacks = function( options ) {
 
 	// Convert options from String-formatted to Object-formatted if needed
 	// (we check in cache first)
+	// 先处理选项字符串，转换为对象格式，处理前先检查cache中存在不存在
 	options = typeof options === "string" ?
 		( optionsCache[ options ] || createOptions( options ) ) :
 		jQuery.extend( {}, options );
 
 	var // Last fire value (for non-forgettable lists)
+		// 上一次触发的值 (for non-forgettable lists)
 		memory,
 		// Flag to know if list was already fired
+		// list是否已经触发的标志
 		fired,
 		// Flag to know if list is currently firing
+		// list是否正在触发
 		firing,
 		// First callback to fire (used internally by add and fireWith)
+		// 第一个要触发的回调（为内部的add和fireWith提供）
 		firingStart,
 		// End of the loop when firing
+		// 循环的终点
 		firingLength,
 		// Index of currently firing callback (modified by remove if needed)
+		// 当前触发的回调的序号
 		firingIndex,
 		// Actual callback list
+		// 真正的回调列表
 		list = [],
 		// Stack of fire calls for repeatable lists
+		// 可重复触发列表的栈
 		stack = !options.once && [],
 		// Fire callbacks
+		// 触发回调
 		fire = function( data ) {
 			memory = options.memory && data;
 			fired = true;
@@ -1155,10 +1287,12 @@ jQuery.Callbacks = function( options ) {
 			firing = true;
 			for ( ; list && firingIndex < firingLength; firingIndex++ ) {
 				if ( list[ firingIndex ].apply( data[ 0 ], data[ 1 ] ) === false && options.stopOnFalse ) {
-					memory = false; // To prevent further calls using add
+					// To prevent further calls using add 
+					// 防止使用add方法添加的调用
+					memory = false; 
 					break;
 				}
-			}
+			}              
 			firing = false;
 			if ( list ) {
 				if ( stack ) {
@@ -1173,12 +1307,15 @@ jQuery.Callbacks = function( options ) {
 			}
 		},
 		// Actual Callbacks object
+		// 实际的callback对象
 		self = {
 			// Add a callback or a collection of callbacks to the list
+			// 增加回调函数
 			add: function() {
 				if ( list ) {
 					// First, we save the current length
 					var start = list.length;
+					// 匿名函数
 					(function add( args ) {
 						jQuery.each( args, function( _, arg ) {
 							var type = jQuery.type( arg );
@@ -1186,16 +1323,19 @@ jQuery.Callbacks = function( options ) {
 								list.push( arg );
 							} else if ( arg && arg.length && type !== "string" ) {
 								// Inspect recursively
+								// 递归检查
 								add( arg );
 							}
 						});
 					})( arguments );
 					// Do we need to add the callbacks to the
 					// current firing batch?
+					// 是否需要对正在触发的列表中增加函数？
 					if ( firing ) {
 						firingLength = list.length;
 					// With memory, if we're not firing then
 					// we should call right away
+					// 如果有memory,如果没有在触发队列，那么需要正确触发
 					} else if ( memory ) {
 						firingStart = start;
 						fire( memory );
@@ -1204,6 +1344,7 @@ jQuery.Callbacks = function( options ) {
 				return this;
 			},
 			// Remove a callback from the list
+			// 从队列中移除一个回调
 			remove: function() {
 				if ( list ) {
 					jQuery.each( arguments, function( _, arg ) {
@@ -1211,6 +1352,7 @@ jQuery.Callbacks = function( options ) {
 						while( ( index = jQuery.inArray( arg, list, index ) ) > -1 ) {
 							list.splice( index, 1 );
 							// Handle firing indexes
+							// 处理正在触发的索引号
 							if ( firing ) {
 								if ( index <= firingLength ) {
 									firingLength--;
@@ -1225,24 +1367,29 @@ jQuery.Callbacks = function( options ) {
 				return this;
 			},
 			// Control if a given callback is in the list
+			// 控制传入的回调是否在队列中
 			has: function( fn ) {
 				return jQuery.inArray( fn, list ) > -1;
 			},
 			// Remove all callbacks from the list
+			// 情况异步队列
 			empty: function() {
 				list = [];
 				return this;
 			},
 			// Have the list do nothing anymore
+			// 队列置为无效
 			disable: function() {
 				list = stack = memory = undefined;
 				return this;
 			},
 			// Is it disabled?
+			// 判断队列是否有效
 			disabled: function() {
 				return !list;
 			},
 			// Lock the list in its current state
+			// 锁定队列在当前状态上
 			lock: function() {
 				stack = undefined;
 				if ( !memory ) {
@@ -1251,10 +1398,12 @@ jQuery.Callbacks = function( options ) {
 				return this;
 			},
 			// Is it locked?
+			// 判断队列是否锁定
 			locked: function() {
 				return !stack;
 			},
 			// Call all callbacks with the given context and arguments
+			// 在传入的上下文和参数上调用所有回调
 			fireWith: function( context, args ) {
 				args = args || [];
 				args = [ context, args.slice ? args.slice() : args ];
@@ -1268,11 +1417,13 @@ jQuery.Callbacks = function( options ) {
 				return this;
 			},
 			// Call all the callbacks with the given arguments
+			// 根据参数调用所有回调函数
 			fire: function() {
 				self.fireWith( this, arguments );
 				return this;
 			},
 			// To know if the callbacks have already been called at least once
+			// 判断回调函数是否被调用了至少一次
 			fired: function() {
 				return !!fired;
 			}
@@ -1358,7 +1509,7 @@ jQuery.extend({
 		// Add list-specific methods
 		// 添加指定的方法
 		jQuery.each( tuples, function( i, tuple ) {
-			// tuple[ 2 ]是jQuery.Callbacks里的队列
+			// tuple[ 2 ]是通过jQuery.Callbacks构造的异步队列
 			var list = tuple[ 2 ],
 				stateString = tuple[ 3 ];
 
@@ -1408,18 +1559,22 @@ jQuery.extend({
 	},
 
 	// Deferred helper
+	// Deffered的便捷函数
 	when: function( subordinate /* , ..., subordinateN */ ) {
 		var i = 0,
 			resolveValues = core_slice.call( arguments ),
 			length = resolveValues.length,
 
 			// the count of uncompleted subordinates
+			// 延迟执行的函数的数目
 			remaining = length !== 1 || ( subordinate && jQuery.isFunction( subordinate.promise ) ) ? length : 0,
 
 			// the master Deferred. If resolveValues consist of only a single Deferred, just use that.
+			// 主延迟对象，如果延迟执行的函数要求只有一个延迟对象，使用这个
 			deferred = remaining === 1 ? subordinate : jQuery.Deferred(),
 
 			// Update function for both resolve and progress values
+			// 更新resolve和progress的值
 			updateFunc = function( i, contexts, values ) {
 				return function( value ) {
 					contexts[ i ] = this;
@@ -1435,6 +1590,7 @@ jQuery.extend({
 			progressValues, progressContexts, resolveContexts;
 
 		// add listeners to Deferred subordinates; treat others as resolved
+		// 增加监听事件
 		if ( length > 1 ) {
 			progressValues = new Array( length );
 			progressContexts = new Array( length );
@@ -1452,6 +1608,7 @@ jQuery.extend({
 		}
 
 		// if we're not waiting on anything, resolve the master
+		// 如果不用延迟，直接调用resolve方法
 		if ( !remaining ) {
 			deferred.resolveWith( resolveContexts, resolveValues );
 		}
@@ -1475,6 +1632,7 @@ jQuery.support = (function() {
 		div = document.createElement("div");
 
 	// Preliminary tests
+	// 进行测试
 	div.setAttribute( "className", "t" );
 	div.innerHTML = "  <link/><table></table><a href='/a'>a</a><input type='checkbox'/>";
 
@@ -1483,67 +1641,86 @@ jQuery.support = (function() {
 	a.style.cssText = "top:1px;float:left;opacity:.5";
 
 	// Can't get basic test support
+	// 无法获取测试用例
 	if ( !all || !all.length || !a ) {
 		return {};
 	}
 
 	// First batch of supports tests
+	// 支持测试
 	select = document.createElement("select");
 	opt = select.appendChild( document.createElement("option") );
 	input = div.getElementsByTagName("input")[ 0 ];
 
 	support = {
 		// IE strips leading whitespace when .innerHTML is used
+		// 当使用.innerHTML时，IE脚本存在前导空白
 		leadingWhitespace: ( div.firstChild.nodeType === 3 ),
 
 		// Make sure that tbody elements aren't automatically inserted
 		// IE will insert them into empty tables
+		// 确信tbody元素没有被自动插入，IE会在空table中自动插入tbody
 		tbody: !div.getElementsByTagName("tbody").length,
 
 		// Make sure that link elements get serialized correctly by innerHTML
 		// This requires a wrapper element in IE
+		// 确信链接元素被innerHTML正确的处理
+		// 在IE中需要进行包裹
 		htmlSerialize: !!div.getElementsByTagName("link").length,
 
 		// Get the style information from getAttribute
 		// (IE uses .cssText instead)
+		// 使用getAttribute获取css样式，IE使用.cssText
 		style: /top/.test( a.getAttribute("style") ),
 
 		// Make sure that URLs aren't manipulated
 		// (IE normalizes it by default)
+		// 确信URL地址没有被篡改，IE默认会使其标准化
 		hrefNormalized: ( a.getAttribute("href") === "/a" ),
 
 		// Make sure that element opacity exists
 		// (IE uses filter instead)
 		// Use a regex to work around a WebKit issue. See #5145
+		// 确信元素透明存在，IE使用filter，为了在WebKit中也有效，使用正则的方式
 		opacity: /^0.5/.test( a.style.opacity ),
 
 		// Verify style float existence
 		// (IE uses styleFloat instead of cssFloat)
+		// 验证样式浮动，IE使用styleFloat代替cssFloat
 		cssFloat: !!a.style.cssFloat,
 
 		// Make sure that if no value is specified for a checkbox
 		// that it defaults to "on".
 		// (WebKit defaults to "" instead)
+		// 确信如果checkbox没有被指定值，默认会被设置为"on"
+		// WebKit中默认为空字符串
 		checkOn: ( input.value === "on" ),
 
 		// Make sure that a selected-by-default option has a working selected property.
 		// (WebKit defaults to false instead of true, IE too, if it's in an optgroup)
+		// 确信一个默认选择的选项有一个可以工作的selected属性
+		// WebKit默认使用false代替了true,如果这个option不是在一个option group中的话,IE也会这样处理
 		optSelected: opt.selected,
 
 		// Test setAttribute on camelCase class. If it works, we need attrFixes when doing get/setAttribute (ie6/7)
+		// 在驼峰规则的class上测试setAttribute，如果可以工作，我们在ie6/7中使用get/setAttribute时需要修复属性
 		getSetAttribute: div.className !== "t",
 
 		// Tests for enctype support on a form(#6743)
+		// 测试是否支持form加密
 		enctype: !!document.createElement("form").enctype,
 
 		// Makes sure cloning an html5 element does not cause problems
 		// Where outerHTML is undefined, this still works
+		// 确信复制html5元素不会引发问题，当outerHTML没有定义时，仍然可以工作
 		html5Clone: document.createElement("nav").cloneNode( true ).outerHTML !== "<:nav></:nav>",
 
 		// jQuery.support.boxModel DEPRECATED in 1.8 since we don't support Quirks Mode
+		// 自从1.8版本中不支持Quirks Mode以后，jQuery.support.boxModel被标记为过时的
 		boxModel: ( document.compatMode === "CSS1Compat" ),
 
 		// Will be defined later
+		// 会在后面定义
 		submitBubbles: true,
 		changeBubbles: true,
 		focusinBubbles: false,
@@ -1557,16 +1734,19 @@ jQuery.support = (function() {
 	};
 
 	// Make sure checked status is properly cloned
+	// 确信勾选属性被正确复制
 	input.checked = true;
 	support.noCloneChecked = input.cloneNode( true ).checked;
 
 	// Make sure that the options inside disabled selects aren't marked as disabled
 	// (WebKit marks them as disabled)
+	// 确信被置为无效的selects中的options没有被标记为无效，WebKit内核把他们也标记为无效
 	select.disabled = true;
 	support.optDisabled = !opt.disabled;
 
 	// Test to see if it's possible to delete an expando from an element
 	// Fails in Internet Explorer
+	// 测试是否可以删除一个元素的自定义扩展属性，在IE中失效
 	try {
 		delete div.test;
 	} catch( e ) {
@@ -1577,6 +1757,8 @@ jQuery.support = (function() {
 		div.attachEvent( "onclick", clickFn = function() {
 			// Cloning a node shouldn't copy over any
 			// bound event handlers (IE does this)
+			// 复制一个节点的时候不应该复制绑定到节点上的事件
+			// IE会这么干
 			support.noCloneEvent = false;
 		});
 		div.cloneNode( true ).fireEvent("onclick");
@@ -1585,6 +1767,7 @@ jQuery.support = (function() {
 
 	// Check if a radio maintains its value
 	// after being appended to the DOM
+	// 检查一个单选框在附加到DOM树上后是否含有设置的值
 	input = document.createElement("input");
 	input.value = "t";
 	input.setAttribute( "type", "radio" );
@@ -1593,6 +1776,7 @@ jQuery.support = (function() {
 	input.setAttribute( "checked", "checked" );
 
 	// #11217 - WebKit loses check when the name is after the checked attribute
+	// 如果name属性在check属性后被设置，在WebKit中会丢失check属性
 	input.setAttribute( "name", "t" );
 
 	div.appendChild( input );
@@ -1600,10 +1784,12 @@ jQuery.support = (function() {
 	fragment.appendChild( div.lastChild );
 
 	// WebKit doesn't clone checked state correctly in fragments
+	// WebKit不会正确复制checked状态
 	support.checkClone = fragment.cloneNode( true ).cloneNode( true ).lastChild.checked;
 
 	// Check if a disconnected checkbox will retain its checked
 	// value of true after appended to the DOM (IE6/7)
+	// 检查一个没有连接的复选框在附加到DOM树后是否会保留checked=true属性
 	support.appendChecked = input.checked;
 
 	fragment.removeChild( input );
@@ -1615,7 +1801,9 @@ jQuery.support = (function() {
 	// are used, namely in IE. Short-circuiting here helps us to
 	// avoid an eval call (in setAttribute) which can cause CSP
 	// to go haywire. See: https://developer.mozilla.org/en/Security/CSP
+	// 我们只关心浏览器是否使用非标准事件系统，这里的短路循环会帮助我们避免会引发CSP混乱的调用
 	if ( div.attachEvent ) {
+		// 部分浏览器的事件需要增加on前缀
 		for ( i in {
 			submit: true,
 			change: true,
@@ -1632,6 +1820,7 @@ jQuery.support = (function() {
 	}
 
 	// Run tests that need a body at doc ready
+	// 在DOM文档准备完成的时候测试需要body节点的用例
 	jQuery(function() {
 		var container, div, tds, marginDiv,
 			divReset = "padding:0;margin:0;border:0;display:block;overflow:hidden;",
@@ -1639,6 +1828,7 @@ jQuery.support = (function() {
 
 		if ( !body ) {
 			// Return for frameset docs that don't have a body
+			// frameset节点没有body节点
 			return;
 		}
 
@@ -1647,16 +1837,21 @@ jQuery.support = (function() {
 		body.insertBefore( container, body.firstChild );
 
 		// Construct the test element
+		// 建立测试元素
 		div = document.createElement("div");
 		container.appendChild( div );
 
 		// Check if table cells still have offsetWidth/Height when they are set
+		// 检查单元格被设置为不可见并且所在行中仍然有可见单元格时，单元格是否有offsetWidth/Height属性
 		// to display:none and there are still other visible table cells in a
 		// table row; if so, offsetWidth/Height are not reliable for use when
+		// 如果如此，当检测一个元素是否可见的时候，offsetWidth/Height属性是不可信的
 		// determining if an element has been hidden directly using
 		// display:none (it is still safe to use offsets if a parent element is
+		// 如果一个父元素被隐藏的话，使用offset仍然是安全的
 		// hidden; don safety goggles and see bug #4512 for more information).
 		// (only IE 8 fails this test)
+		// 只有IE8无法通过这个测试
 		div.innerHTML = "<table><tr><td></td><td>t</td></tr></table>";
 		tds = div.getElementsByTagName("td");
 		tds[ 0 ].style.cssText = "padding:0;margin:0;border:0;display:none";
@@ -1667,9 +1862,12 @@ jQuery.support = (function() {
 
 		// Check if empty table cells still have offsetWidth/Height
 		// (IE <= 8 fail this test)
+		// 检查空单元格是否具有offsetWidth/Height
+		// 只有IE8无法通过这个测试
 		support.reliableHiddenOffsets = isSupported && ( tds[ 0 ].offsetHeight === 0 );
 
 		// Check box-sizing and margin behavior
+		// 检查盒大小和边界行为
 		div.innerHTML = "";
 		div.style.cssText = "box-sizing:border-box;-moz-box-sizing:border-box;-webkit-box-sizing:border-box;padding:1px;border:1px;display:block;width:4px;margin-top:1%;position:absolute;top:1%;";
 		support.boxSizing = ( div.offsetWidth === 4 );
@@ -1677,6 +1875,7 @@ jQuery.support = (function() {
 
 		// NOTE: To any future maintainer, we've window.getComputedStyle
 		// because jsdom on node.js will break without it.
+		// 注意：任何维护的特性，如果没有window.getComputedStyle，jsdom在nodejs中会终止，
 		if ( window.getComputedStyle ) {
 			support.pixelPosition = ( window.getComputedStyle( div, null ) || {} ).top !== "1%";
 			support.boxSizingReliable = ( window.getComputedStyle( div, null ) || { width: "4px" } ).width === "4px";
@@ -1700,12 +1899,16 @@ jQuery.support = (function() {
 			// elements when setting their display to 'inline' and giving
 			// them layout
 			// (IE < 8 does this)
+			// IE8以下版本存在该问题
+			// 测试当使用内置block-level元素被设置display属性为inline并且设置layout的时候表现的像行内块
 			div.innerHTML = "";
 			div.style.cssText = divReset + "width:1px;padding:1px;display:inline;zoom:1";
 			support.inlineBlockNeedsLayout = ( div.offsetWidth === 3 );
 
 			// Check if elements with layout shrink-wrap their children
+			// 检查带有layout属性的元素收缩包裹他们的子节点
 			// (IE 6 does this)
+			// IE6存在该问题
 			div.style.display = "block";
 			div.style.overflow = "visible";
 			div.innerHTML = "<div></div>";
@@ -1716,11 +1919,13 @@ jQuery.support = (function() {
 		}
 
 		// Null elements to avoid leaks in IE
+		// 在IE中避免泄露的空元素
 		body.removeChild( container );
 		container = div = tds = marginDiv = null;
 	});
 
 	// Null elements to avoid leaks in IE
+	// 在IE中避免泄露的空元素
 	fragment.removeChild( div );
 	all = a = select = opt = input = fragment = div = null;
 
@@ -6432,7 +6637,7 @@ jQuery.extend({
 					elem = context.createTextNode( elem );
 				} else {
 					// Ensure a safe container in which to render the html
-					// 确保将html渲染在一个安全的容器中
+					// 确信将html渲染在一个安全的容器中
 					safe = safe || createSafeFragment( context );
 					div = context.createElement("div");
 					safe.appendChild( div );
