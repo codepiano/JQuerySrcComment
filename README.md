@@ -11,4 +11,6 @@ JQuery Sourcecode Comment
 
 3. http://www.learningjquery.com/
 
+4. http://www.ruanyifeng.com/blog/2011/08/a_detailed_explanation_of_jquery_deferred_object.html
+
 转载请注明出处，谢谢
